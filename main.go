@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"strings"
@@ -10,7 +11,16 @@ import (
 	"github.com/ollama/ollama/api"
 )
 
-var client *api.Client
+type Result struct {
+	Text    string
+	Verdict string
+}
+
+var (
+	client *api.Client
+	tmpl   = template.Must(template.ParseFiles("templates/result.html"))
+	res    Result
+)
 
 func Ollama(ctx context.Context, prompt string) (string, error) {
 	stream := false
@@ -57,15 +67,20 @@ func PostHandle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	verdict := strings.ToUpper(strings.TrimSpace(answer))
+
+	res.Text = commit
+
 	switch {
 	case strings.HasPrefix(verdict, "GOOD"):
-		fmt.Fprintf(w, "коммент: %s (хороший комментарий)", commit)
+		res.Verdict = "хороший комментарий"
 	case strings.HasPrefix(verdict, "BAD"):
-		fmt.Fprintf(w, "коммент: %s (негативный комментарий)", commit)
-	default:
+		res.Verdict = "плохой комментарий"
 		log.Printf("неожиданный ответ модели: %q", answer)
 		http.Error(w, "не удалось определить оценку", http.StatusInternalServerError)
+		return
 	}
+
+	tmpl.Execute(w, res)
 }
 
 func main() {
